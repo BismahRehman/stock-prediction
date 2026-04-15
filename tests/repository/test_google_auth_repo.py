@@ -1,87 +1,84 @@
-# sync def add_user(db, email,userinfo):
-#
-#     result = await db.execute(select(User).where(User.email == email))
-#     user = result.scalar_one_or_none()
-#
-#     if not user:
-#         user = User(
-#             email=email,
-#             google_id=userinfo.get("sub"),  # Google’s unique user ID
-#             auth_provider="google"
-#
-#             # other fields as needed
-#         )
-#         db.add(user)
-#         await db.commit()
-#         await db.refresh(user)
-#
-#     return user
-from unittest.mock import MagicMock, AsyncMock
-
 import pytest
-from fastapi import HTTPException
+from unittest.mock import MagicMock, AsyncMock
 
 from app.repository.google_auth import add_user
 
-# -------------------------
-# TEST 2: IF USER NOT EXIST
-# -------------------------
+
+# =========================================================
+# =============== USER DOES NOT EXIST ======================
+# =========================================================
+
 @pytest.mark.asyncio
-async def test_add_user():
-    # --- Mock user ---
-    mock_user = MagicMock()
+async def test_add_user_creates_new_user():
+    """
+    If user does not exist:
+    - New user should be created
+    - DB add/commit/refresh should be called
+    - Correct fields should be assigned
+    """
 
     userinfo = {"sub": "google123"}
     email = "test@example.com"
 
-    # --- Mock DB result ---
+    # DB returns None → user not found
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = None
 
-    # --- Mock DB ---
     mock_db = MagicMock()
     mock_db.execute = AsyncMock(return_value=mock_result)
     mock_db.commit = AsyncMock()
     mock_db.refresh = AsyncMock()
 
-    # --- Call function ---
-
-    await add_user(db=mock_db, email=email, userinfo=userinfo)
+    # --- Call ---
+    user = await add_user(db=mock_db, email=email, userinfo=userinfo)
 
     # --- Assertions ---
     mock_db.add.assert_called_once()
+
+    created_user = mock_db.add.call_args[0][0]
+
+    assert created_user.email == email
+    assert created_user.google_id == "google123"
+    assert created_user.auth_provider == "google"
+
+    assert user == created_user
+
     mock_db.commit.assert_awaited_once()
-    mock_db.refresh.assert_awaited_once()
+    mock_db.refresh.assert_awaited_once_with(created_user)
 
 
+# =========================================================
+# ================= USER ALREADY EXISTS ====================
+# =========================================================
 
-# -------------------------
-# TEST 1: IF USER NOT EXIST
-# -------------------------
 @pytest.mark.asyncio
-async def test_add_user_exist():
-    # --- Mock user ---
-    existing_user = MagicMock()
-    existing_user.email = "test@example.com"
+async def test_add_user_returns_existing_user():
+    """
+    If user already exists:
+    - Should NOT create new user
+    - Should return existing user
+    - No DB write operations
+    """
+
+    existing_user = MagicMock(email="test@example.com")
 
     userinfo = {"sub": "google123"}
     email = "test@example.com"
 
-    # --- Mock DB result ---
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = existing_user
 
-    # --- Mock DB ---
     mock_db = MagicMock()
     mock_db.execute = AsyncMock(return_value=mock_result)
     mock_db.commit = AsyncMock()
     mock_db.refresh = AsyncMock()
 
-    # --- Call function ---
+    # --- Call ---
+    user = await add_user(db=mock_db, email=email, userinfo=userinfo)
 
-    await add_user(db=mock_db, email=email, userinfo=userinfo)
+    # --- Assertions ---
+    assert user == existing_user
 
-    # --- should NOT create new user ---
     mock_db.add.assert_not_called()
     mock_db.commit.assert_not_called()
     mock_db.refresh.assert_not_called()
