@@ -1,10 +1,11 @@
+
 # app/main.py
 
 from fastapi import FastAPI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import Base, engine, AsyncSessionLocal
+from app.database import AsyncSessionLocal
 from app.model.user import User
 
 from app.routes.user import router as user_router
@@ -20,7 +21,10 @@ from app.service.auth import hash_password
 
 app = FastAPI()
 
+
+# ---------------------------
 # Routers
+# ---------------------------
 app.include_router(user_router)
 app.include_router(google_router)
 app.include_router(prediction_router)
@@ -30,16 +34,10 @@ app.include_router(admin_router)
 
 
 # ---------------------------
-# Startup event
+# Startup event (NO create_all)
 # ---------------------------
 @app.on_event("startup")
 async def on_startup():
-
-    # create tables
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    # IMPORTANT: session must be OUTSIDE engine block
     async with AsyncSessionLocal() as db:
         await create_default_admin(db)
 
